@@ -118,3 +118,61 @@ Whether `pi-debug.log` leaks secrets / OAuth tokens is `con-OQ1` — needs live 
 ### Subcommand-Owned State
 
 `pi install`, `pi update`, `pi config` modify operator state outside session bounds. (Defer detail to porting/reimpl-spec.)
+
+---
+
+## 2026-05-06 — protocols phase (append)
+
+### Session JSONL v3 Schema Catalog (resolves arch-CF4 + con-CF3)
+
+10 record types in the `SessionEntry` discriminated union (`packages/coding-agent/src/core/session-manager.ts`):
+
+1. `message` (role: user/assistant/tool)
+2. `compaction` (summary that semantically replaces older entries)
+3. `branch_summary` (marks a branch fork point)
+4. `thinking_level_change` (mid-session thinking toggle)
+5. `model_change` (mid-session model swap)
+6. `custom` (extension-driven)
+7. `custom_message` (extension-driven)
+8. `label` (named bookmark)
+9. `session_info` (per-file header — first record; carries `sessionId`, `cwd`, `parentSessionId?`, `version: 3`)
+10. (base) `SessionEntryBase = { type, id, parentId, timestamp }`
+
+**Identifiers**:
+- `sessionId`: uuidv7
+- Per-entry `id`: 8 hex chars from `randomUUID()` with up-to-100-retry collision check (`session-manager.ts:206-213`)
+- `timestamp`: ISO-8601 string (no ns precision)
+
+**Branching**: 3 distinct mechanisms — `branch()` in-place leaf move, `branchWithSummary()` adds a `branch_summary` entry, `createBranchedSession()` writes a new file with only the path-to-leaf and `parentSessionId` in header.
+
+### Deferred-Flush Behavior (resolves dsm-RT6)
+
+`_persist` (`session-manager.ts:801-819`) buffers in memory until first assistant message arrives, then flushes the whole buffer. **Crash before first assistant ⇒ user prompt lost** — the file may not exist on disk yet. `dispose()` and `abort()` do not flush.
+
+### Non-Atomic Rewrite Confirmed (Defect 2.1)
+
+`_rewriteFile` (`session-manager.ts:775-779`) is `writeFileSync(file, content)` with no temp+rename. Triggered on migration, corrupt-file recovery, and `createBranchedSession` paths.
+
+### Encoded-cwd Lossy
+
+`--${cwd.replace(/^[/\\]/,"").replace(/[/\\:]/g,"-")}--` (`session-manager.ts:429`):
+- `/a/b` and `/a-b` collide
+- Case sensitivity inherits the host filesystem
+- **Cross-OS sync of `~/.pi/agent/sessions/` is unsafe**
+
+### Concurrent-Reader Behavior (open)
+
+No file locking, no inotify, no atomic publish. Mid-rewrite reader behavior is undefined; `pro-OQ2` requires runtime test.
+
+### `auth.json` Schema Refinement
+
+Per-provider entries with shape `{ type: "api_key" | "oauth", api_key?: string, oauth?: {...} }`. Implicit schema in `auth-storage.ts` TS types. Mode 0600 enforced on every write (Pass 6 confirmed).
+
+### Lock Semantics Family
+
+| File | Lock | Concurrent-write semantics |
+|---|---|---|
+| `auth.json` | proper-lockfile during OAuth refresh | Single-flight refresh |
+| `settings.json` | proper-lockfile via SettingsManager | Defect P6.6 / dsm-RT3: `migrateAuthToAuthJson` does unlocked read-modify-write that races SettingsManager |
+| `models.json` | None | Reader's tolerance for concurrent rewrite open |
+| Sessions JSONL | None | Concurrent readers see partial writes |

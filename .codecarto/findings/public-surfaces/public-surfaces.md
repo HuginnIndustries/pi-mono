@@ -131,3 +131,51 @@ Corrections and additions to the architecture-phase enumeration. (Catalog-level 
 | Interactive TUI | TTY stdin (default) | TTY paint via pi-tui differential renderer |
 | Print mode | `--print` or piped stdin (`main.ts:634` auto-fallback) | Plain text on stdout, exit code 0/non-0 |
 | RPC mode | (mode-specific flag) | JSON-RPC over stdio |
+
+---
+
+## 2026-05-06 — protocols phase (append)
+
+Wire-format catalog refinements to surface the externally-observable protocol shapes.
+
+### `AssistantMessageEvent` Wire Catalog
+
+12 variants discriminated by `type ∈ {start, text_start, text_delta, text_end, thinking_start, thinking_delta, thinking_end, toolcall_start, toolcall_delta, toolcall_end, done, error}`. Field-level detail in `findings/protocols/protocols-and-state.md` §EC1 and `scratch/proto-events.md`.
+
+### `ProxyAssistantMessageEvent` Wire Catalog
+
+streamProxy CLIENT POSTs to `${proxyUrl}/api/stream` with `Authorization: Bearer ${authToken}`; body `{model, context, options}`; response framing is **custom `data: <json>\n` (single newline, NOT canonical SSE `\n\n`)**. Server omits `partial: AssistantMessage` field; client reconstructs from closure-scoped accumulator. Variant union at `packages/agent/src/proxy.ts:36-57`.
+
+### Extension Event Catalog
+
+22 union members in `ExtensionEvent` (`packages/coding-agent/src/core/extensions/types.ts:950-972`); 29 distinct subscribable event names via `on()` overloads (`:1089-1126`) because `SessionEvent` is itself an 8-member union. **All emitters are guarded EXCEPT `emitToolCall`** (`runner.ts:806-827`), which is the only path where a handler throw aborts the tool and skips remaining handlers. Catalog detail in `scratch/proto-extension-events.md`.
+
+### TUI Render Wire Format
+
+ANSI escape sequence enumeration confirmed against source (`packages/tui/src/tui.ts`, `terminal.ts`, `terminal-image.ts`):
+- Synchronized output mode 2026: `\x1b[?2026h ... \x1b[?2026l` wraps each paint
+- Custom APC `CURSOR_MARKER`: `\x1b_pi:c\x07` (`tui.ts:68`)
+- Kitty keyboard push: `\x1b[>7u` (`terminal.ts:155`); pop: `\x1b[<u`
+- Cell-size query: `\x1b[16t` (`tui.ts:447`)
+- Kitty inline image: `\x1b_G…\x1b\\` (`terminal-image.ts:106`)
+- iTerm2 inline image: `\x1b]1337;File=…\x07` (`terminal-image.ts:107`)
+- Capability detection: env-var sniffing only, no OSC query; tmux/screen/cmux force `images: null`
+
+### Session JSONL v3 Record Type Catalog
+
+10 record types share `SessionEntryBase = { type, id, parentId, timestamp }`:
+1. `message` (user/assistant/tool)
+2. `compaction`
+3. `branch_summary`
+4. `thinking_level_change`
+5. `model_change`
+6. `custom`
+7. `custom_message`
+8. `label`
+9. `session_info` (per-file header)
+
+`sessionId` is uuidv7; per-entry `id` is 8 hex chars from `randomUUID()` with collision retry. Schema TS types in `packages/coding-agent/src/core/session-manager.ts`. (Full schema → `scratch/proto-sessions.md`.)
+
+### Discovery / Encoding Note
+
+Session file path encoding is lossy: `--${cwd.replace(/^[/\\]/,"").replace(/[/\\:]/g,"-")}--` (`session-manager.ts:429`). `/a/b` and `/a-b` collide. Cross-OS sync of `~/.pi/agent/sessions/` is **unsafe** — case sensitivity inherits the host filesystem.

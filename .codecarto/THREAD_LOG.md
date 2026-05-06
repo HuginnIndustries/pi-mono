@@ -46,4 +46,5 @@ proposed conventions and decisions in their respective sections only.
 - 2026-05-06 — architecture — mapped 5 packages (pi-ai, pi-agent-core, pi-tui, pi-web-ui, pi-coding-agent), 6 portability hazards, 9 carry-forward items routed — [closeout](closeouts/2026-05-06-architecture.md)
 - 2026-05-06 — defect-scan-mechanical — 39 high/critical findings (incl. 2 critical data-loss); resolved arch-CF6 + arch-CF7; 11 items routed to semantic phase — [closeout](closeouts/2026-05-06-defect-scan-mechanical.md)
 - 2026-05-06 — contracts — documented 12 surfaces, 18 acceptance scenarios; resolved arch-CF1/CF2 + dsm-RT5/RT7; surfaced 6 architecture-phase corrections — [closeout](closeouts/2026-05-06-contracts.md)
+- 2026-05-06 — protocols — 11 boundaries, 6 event catalogs, 6 state machines (incl. deferred-flush + reload + OAuth refresh), 27 hazards; resolved arch-CF3/4/5 + con-CF1/2/3/4 + dsm-RT6 — [closeout](closeouts/2026-05-06-protocols.md)
 

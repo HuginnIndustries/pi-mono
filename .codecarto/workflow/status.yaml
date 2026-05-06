@@ -8,7 +8,7 @@ pipeline: workflow/pipeline-full-with-deep-audit.yaml
 #   pipeline-defect-scan.yaml                    → remove contracts through reimplementation-spec; collapse defect phases into a single defect-scan
 #   pipeline-lite.yaml                           → remove all defect-scan phases, porting, and reimplementation-spec
 #   pipeline-architecture-only.yaml              → keep only architecture
-current_phase: protocols  # Set to "complete" when all phases are done.
+current_phase: defect-scan-semantic  # Set to "complete" when all phases are done.
 last_updated: "2026-05-06"
 # Schema for open_questions and carry_forward entries (see GUIDE.md "Open Questions vs Carry-Forward"):
 #   open_questions: items that are still genuinely unknown (need a runtime test, maintainer decision, spec ruling).
@@ -162,36 +162,49 @@ phases:
         description: "streamSimple* sync-throw vs stream-error contract drift (con-OQ3); Pass 5 framing."
         deferred_reason: "Pass 5 (contract violations) rubric."
   protocols:
-    status: pending
-    owner_notes: []
-    outputs_present: []
-    open_questions: []
+    status: complete
+    owner_notes:
+      - "11 boundaries identified; 6 event-catalog entries, 6 state machines (incl. session JSONL deferred-flush, TUI render, streamProxy connection, OAuth refresh, extension reload), 7 persistent-schema sub-sections, 27 compatibility hazards."
+      - "Resolved arch-CF3 (12-variant AssistantMessageEvent), arch-CF4 (10-record JSONL v3 schema), arch-CF5 (6-step TUI render protocol with confirmed escape codes), con-CF1 / con-CF2 / con-CF3 / con-CF4, dsm-RT6 (deferred-flush state machine + crash-loses-prompt hazard)."
+      - "Important corrections: 22 ExtensionEvent union members / 29 subscribable names (not 25); session-jsonl.ts does not exist (everything in core/session-manager.ts); Kitty push is `\\x1b[>7u` not `>1u`; streamProxy uses Bearer auth + custom `data: <json>\\n` framing (not canonical SSE)."
+    outputs_present:
+      - findings/protocols/protocols-and-state.md
+      - findings/public-surfaces/public-surfaces.md (append)
+      - findings/runtime-lifecycle/runtime-lifecycle.md (append)
+      - findings/state-and-storage/state-and-storage.md (append)
+      - findings/config-model/config-model.md (append)
+    open_questions:
+      - id: pro-OQ1
+        kind: needs-fixture-capture
+        description: "streamProxy SSE heartbeat/keepalive — does the server send any keepalive? Continues arch-OQ3."
+        deferred_reason: "Live capture against running proxy required."
+      - id: pro-OQ2
+        kind: needs-runtime-test
+        description: "Concurrent-reader detection on session JSONL during mid-rewrite — truncated file? EBUSY? inconsistent JSONL stream?"
+        deferred_reason: "Requires concurrent process test."
+      - id: pro-OQ3
+        kind: needs-spec-ruling
+        description: "Should _persist deferred-flush behavior (dsm-RT6) be considered intentional optimization or contract gap? Crash before first assistant loses user prompt."
+        deferred_reason: "Maintainer ruling needed on whether user prompt is durable from receipt or only after assistant turn."
+      - id: pro-OQ4
+        kind: needs-runtime-test
+        description: "Behavior when terminal does not support `\\x1b[?2026` (no synchronized output) — fallback or text leak?"
+        deferred_reason: "Terminal-capability test required."
+      - id: pro-OQ5
+        kind: needs-runtime-test
+        description: "EPIPE on process.stdout.write mid-paint (defect 2.11) — uncaught warning or silent absorb?"
+        deferred_reason: "Disconnect-mid-paint test required."
     carry_forward:
-      - id: arch-CF3
+      - id: pro-CF1
         kind: defer-to-phase
-        target_phase: protocols
-        description: "Detailed event catalog for AssistantMessageEvent (12 variants) — producer, consumer, transport, ordering, fields. Now also subsumes con-CF1 (contracts named the variants but did not pin field-level schema)."
-        deferred_reason: "Event-catalog production is the protocols phase's primary deliverable."
-      - id: arch-CF4
+        target_phase: porting
+        description: "27-row hazards table H1-H27 needs integration with mechanical+semantic defect catalogs into a single porting-oriented Defect Synthesis table."
+        deferred_reason: "Synthesis is porting phase rubric."
+      - id: pro-CF2
         kind: defer-to-phase
-        target_phase: protocols
-        description: "JSONL session persistence format v3 — exact record schema, branch-edit rewrite semantics, replay rules. Subsumes con-CF3 + dsm-RT6."
-        deferred_reason: "Persistent schema notes are a protocols-phase deliverable."
-      - id: arch-CF5
-        kind: defer-to-phase
-        target_phase: protocols
-        description: "TUI render protocol — synchronized output mode 2026, custom APC CURSOR_MARKER, diff strategy, width-change full-clear, Kitty/iTerm2 image escapes."
-        deferred_reason: "Compatibility hazards are a protocols-phase rubric section."
-      - id: con-CF2
-        kind: defer-to-phase
-        target_phase: protocols
-        description: "22-event extension catalog with handler-input-shape + return-semantics per event."
-        deferred_reason: "Event catalog rubric."
-      - id: con-CF4
-        kind: defer-to-phase
-        target_phase: protocols
-        description: "streamProxy SSE wire framing (heartbeat/keepalive open question per arch-OQ3; data: <json>\\n vs canonical SSE \\n\\n)."
-        deferred_reason: "Protocols phase wire-format rubric."
+        target_phase: reimplementation-spec
+        description: "6 state machines (SM1-SM6, esp. SM2 deferred-flush + SM4 proxy connection + SM5 OAuth refresh + SM6 extension reload) need re-expression as language-agnostic FSMs in the reimpl spec."
+        deferred_reason: "Reimpl-spec rubric for protocols and state."
   defect-scan-semantic:
     status: pending
     owner_notes: []
@@ -256,4 +269,4 @@ phases:
     open_questions: []
     carry_forward: []
 next_actions:
-  - Run protocols phase. Resolve arch-CF3 (12-variant AssistantMessageEvent field-level catalog), arch-CF4 (session JSONL v3 schema), arch-CF5 (TUI render protocol), con-CF2 (22-event extension catalog), con-CF4 (streamProxy SSE framing).
+  - Run defect-scan-semantic (passes 3, 4, 5) with high/critical severity cap. 11 carry-forwards from prior phases (8 routed by mechanical phase, 2 by contracts phase, plus arch-CF8 + arch-CF9). Primary targets - Pass 4 dsm-RT1 covert-RCE via models.json !-prefix; Pass 5 con-CF6 streamSimple sync-throw contract drift; Pass 5 arch-CF8 OpenAI-compat URL matrix audit.

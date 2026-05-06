@@ -141,3 +141,38 @@ Hazard: silent partial migration on failure.
 ### Trust-Boundary Reminder
 
 The `<repo>/.pi/` layer is **trusted only if the user trusts the repo**. Cloning a hostile repo and running `pi` in it is a Pass 4 attack surface (covert RCE via `models.json` `!`-prefix; arbitrary extensions auto-loaded into the agent process). Defer full Pass 4 treatment to defect-scan-semantic.
+
+---
+
+## 2026-05-06 — protocols phase (append)
+
+### Config-Crossing-Boundaries Protocol Notes
+
+When config crosses boundaries (filesystem → in-memory → in-flight requests), pi has the following protocol-level invariants:
+
+| Crossing | Invariant | Source |
+|---|---|---|
+| `auth.json` → in-memory cred cache | Read once at startup `reload()`; corrupt JSON sets `loadError` and blocks all reads | `auth-storage.ts` |
+| OAuth refresh: `auth.json` ↔ provider | proper-lockfile single-flight; mode 0600 enforced on every write | `auth-storage.ts` (state machine SM5 in protocols-and-state.md) |
+| `models.json` `headers` → outbound HTTP headers | `!`-prefix shell-exec executed during resolution | `core/config.ts` `resolveConfigValue` |
+| `~/.pi/agent/extensions/` + `<repo>/.pi/extensions/` → loaded extensions | Project FIRST, operator SECOND; dedup by absolute resolved path (NOT by name); `jiti` `moduleCache:false` | `core/extensions/loader.ts` |
+| Slash-command discovery: `~/.pi/agent/prompts/` + `<repo>/.pi/prompts/` + `--prompt-template` | Agent-dir → cwd-dir → flag paths; non-recursive `.md` scan | `core/prompt-templates.ts:248-273` |
+| Settings → `migrateAuthToAuthJson` | Unlocked read-modify-write — **defect P6.6 / dsm-RT3** races proper-lockfile-protected SettingsManager | `core/migrations.ts` |
+
+### Hot-Reload Boundary
+
+`ctx.reload()` re-reads settings/providers/resources without process exit (per `agent-session.ts:2383`). Effects:
+
+- New `~/.pi/agent/auth.json` reads occur as part of provider re-init.
+- Extensions are re-imported fresh (no stale closures, `moduleCache:false`).
+- Captured `pi`/`ctx` references in old extension modules throw on use via `assertActive`.
+
+This is the ONLY hot-reload surface. Other config files (settings, models) require process restart for full effect (open question for some sub-keys; defer per-key audit to maintainer).
+
+### Migrations as Config Boundary Crossings
+
+Per Pass 6 P6.5 + protocols-phase: `runMigrations` runs unconditionally on every startup (5 migration steps, all wrapped in bare `catch {}`). Every `pi` startup performs these schema crossings whether or not the user has touched anything. Hazard: silent partial migration on failure; partial state can persist with no telemetry.
+
+### Trust-Boundary Reaffirmation
+
+The covert RCE channel via `models.json` `!`-prefix is a **config protocol violation** — config values that cross from a project-scoped `<repo>/.pi/models.json` into outbound HTTP headers should not have shell-exec semantics, regardless of whether the user originally trusts the source. Pass 4 framing pending (dsm-RT1).

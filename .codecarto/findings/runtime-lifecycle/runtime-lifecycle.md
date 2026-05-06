@@ -158,3 +158,63 @@ The architecture phase described `streamProxy` as a server lifecycle. **Correcti
 5. Commands → prompts migration
 
 Every step wrapped in bare `catch {}` — partial migration state can persist with no telemetry.
+
+---
+
+## 2026-05-06 — protocols phase (append)
+
+State-machine refinements to the lifecycle.
+
+### Session JSONL Deferred-Flush Lifecycle (resolves dsm-RT6)
+
+**Critical timing**: per `_persist` at `packages/coding-agent/src/core/session-manager.ts:801-819`, message events accumulate in an **in-memory buffer** until the **first assistant message** arrives, at which point the entire buffer is flushed in a single append loop. `dispose()` and `abort()` do **not** flush.
+
+**Implication**: a process crash (or `abort()`) before the first assistant message arrives **loses the user's prompt entirely** — the JSONL file may not exist on disk yet. Documented as protocol hazard H15 + open question pro-OQ3 (needs maintainer ruling).
+
+### Extension Reload Lifecycle (resolves con-CF2 reload semantics)
+
+`ctx.reload()` (`agent-session.ts:2383`) sequence:
+1. Emit `session_shutdown(reason:"reload")` (`:2385`)
+2. Tear down old runtime
+3. Reload settings/providers/resources (`:2389-2393`)
+4. `runtime.invalidate()` at `loader.ts:164` — captured `pi`/`ctx` references throw on next use via `assertActive` (`loader.ts:139`)
+5. Re-import extensions fresh (jiti `moduleCache:false` ensures no stale closures)
+6. Emit `session_start(reason:"reload")` (`:2401`)
+
+### streamProxy Connection Lifecycle (resolves con-CF4)
+
+Per `packages/agent/src/proxy.ts`:
+1. POST `${proxyUrl}/api/stream` with `Bearer ${authToken}`; body `{model, context, options}` (whitelist via `buildProxyRequestOptions` at `:101-114`).
+2. SSE-like body parsing via `buffer.split("\n")` (`:192`); only `data: ` prefix lines processed (`:196`).
+3. Per parsed event, `processProxyEvent` reconstructs `AssistantMessageEvent` (incl. mutating closure-scoped `partial: AssistantMessage` at `:121-137` — server stripped the field; client re-attaches it).
+4. **Out-of-order `_delta`/`_end` events throw** at `:261/:275/:293/:307/:333` (defect 1.22). `toolcall_end` mismatch silently returns `undefined` (`:347`) — asymmetry.
+5. Network failures surfaced as `{type:"error"}` event (`:214-224`), not thrown.
+6. **No timeout**, **no heartbeat parsing** — stale-connection detection is OS-TCP only (arch-OQ3 unresolved).
+7. Closes on terminal `done`/`error` event.
+
+### TUI Render Lifecycle Refinement (resolves arch-CF5)
+
+6-step pipeline in `tui.ts:888-1204`:
+1. Build lines (rootComponent.render())
+2. Composite overlays (`compositeLineAt` at `:810-858` — strict last-resort width clamper)
+3. Strip CURSOR_MARKER (`\x1b_pi:c\x07` at `:68`)
+4. Apply line resets (SGR + OSC 8 terminator at `:796`)
+5. Diff against `previousLines`
+6. Emit only `firstChanged..lastChanged` wrapped in `\x1b[?2026h ... \x1b[?2026l`
+
+Width change always full-clears (`:960`); height change full-clears EXCEPT on Termux (`:969`, `isTermuxSession` at `:111`).
+
+### Width-Overflow Crash Path
+
+**Defect 1.15 / H5**: width-overflow throws inside the `setTimeout` callback after writing crash log to `~/.pi/agent/pi-crash.log` (`tui.ts:1100-1131`). Process killed; lifecycle ended.
+
+### OAuth Refresh Lifecycle (state machine SM5)
+
+Multi-instance refresh is single-flight via `proper-lockfile`:
+1. Provider 401 + soft-expiry exceeded → enter refresh-needed.
+2. Acquire lock on `auth.json`. If held by another instance, wait.
+3. After acquiring, re-read `auth.json` — another instance may have refreshed.
+4. If still stale, exchange refresh token for new access token.
+5. Write new token to `auth.json` (mode 0600 enforced); release lock.
+
+Provider 401 not handled by streamProxy CLIENT (no refresh path).
