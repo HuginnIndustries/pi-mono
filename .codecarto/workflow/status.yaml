@@ -8,7 +8,7 @@ pipeline: workflow/pipeline-full-with-deep-audit.yaml
 #   pipeline-defect-scan.yaml                    → remove contracts through reimplementation-spec; collapse defect phases into a single defect-scan
 #   pipeline-lite.yaml                           → remove all defect-scan phases, porting, and reimplementation-spec
 #   pipeline-architecture-only.yaml              → keep only architecture
-current_phase: defect-scan-semantic  # Set to "complete" when all phases are done.
+current_phase: porting  # Set to "complete" when all phases are done.
 last_updated: "2026-05-06"
 # Schema for open_questions and carry_forward entries (see GUIDE.md "Open Questions vs Carry-Forward"):
 #   open_questions: items that are still genuinely unknown (need a runtime test, maintainer decision, spec ruling).
@@ -206,10 +206,42 @@ phases:
         description: "6 state machines (SM1-SM6, esp. SM2 deferred-flush + SM4 proxy connection + SM5 OAuth refresh + SM6 extension reload) need re-expression as language-agnostic FSMs in the reimpl spec."
         deferred_reason: "Reimpl-spec rubric for protocols and state."
   defect-scan-semantic:
-    status: pending
-    owner_notes: []
-    outputs_present: []
-    open_questions: []
+    status: complete
+    owner_notes:
+      - "37 high/critical findings (3 critical: 4.1 5-channel project-RCE, 5.7 deferred-flush data loss, 5.8 non-atomic rewrite). Pass 3: 10 concurrency hazards. Pass 4: 1 critical + 9 high security/trust. Pass 5: 2 critical + 15 high contract violations. 8 of 18 contract acceptance scenarios fail."
+      - "All 11 inbound carry-forwards resolved. dsm-RT1 closed but with IMPORTANT CORRECTION: actual project-RCE perimeter is the 5-channel bundle in 4.1 (extensions+packages+shellCommandPrefix+shellPath+npmCommand), NOT models.json (which isn't loaded from project scope). Porting must propagate this correction into the synthesis."
+      - "Cross-cutting: AgentSession has 6 cancellation domains; abort() cascades to 2; dispose() cascades to 0. Likely cause of 'stuck after Ctrl+C' UX reports."
+    outputs_present:
+      - findings/defect-scan-semantic/semantic-defects.md
+    open_questions:
+      - id: sem-OQ1
+        kind: needs-runtime-test
+        description: "Lock-stealing semantics under proper-lockfile stale: 30000 with slow OAuth fetch — both instances writing? (4.7)"
+        deferred_reason: "Live OAuth contention test required."
+      - id: sem-OQ2
+        kind: needs-runtime-test
+        description: "Microtask-interleaving timing for deferred-flush check-then-act (3.4) — actual bug or theoretical?"
+        deferred_reason: "Concurrent-process timing test."
+      - id: sem-OQ3
+        kind: needs-maintainer-decision
+        description: "Should built-in tools (bash/edit/write) require explicit user confirmation per call?"
+        deferred_reason: "Maintainer policy."
+      - id: sem-OQ4
+        kind: needs-maintainer-decision
+        description: "Should <cwd>/.pi/ be loaded at all without explicit consent (--trust-project flag)?"
+        deferred_reason: "Maintainer policy on default-trust posture."
+      - id: sem-OQ5
+        kind: needs-spec-ruling
+        description: "Listener-fan-out unguarded behavior (5.10) — intended contract or defect? Continues con-OQ4."
+        deferred_reason: "Maintainer ruling."
+      - id: sem-OQ6
+        kind: needs-runtime-test
+        description: "mini-lit MarkdownBlock HTML-sanitization audit."
+        deferred_reason: "Third-party library audit."
+      - id: sem-OQ7
+        kind: needs-runtime-test
+        description: "Slow-OAuth-token-endpoint exploitability bounds for lock-stealing (4.7)."
+        deferred_reason: "Provider-side timing test."
     carry_forward:
       - id: dsm-RT1
         kind: defer-to-phase
@@ -261,7 +293,22 @@ phases:
     owner_notes: []
     outputs_present: []
     open_questions: []
-    carry_forward: []
+    carry_forward:
+      - id: pro-CF1
+        kind: defer-to-phase
+        target_phase: porting
+        description: "Integrate H1-H27 protocol hazards table with mechanical (39 high/critical) + semantic (37 high/critical) defect catalogs into a single porting-oriented Defect Synthesis table with three recommendations per row (fix before porting / port differently / leave behind)."
+        deferred_reason: "Synthesis is porting phase rubric."
+      - id: sem-CR1
+        kind: defer-to-phase
+        target_phase: porting
+        description: "Correct framing of project-RCE perimeter in protocols H24 + contracts §Trust Boundaries during synthesis. Real perimeter is the 5-channel bundle in 4.1 (extensions + packages + shellCommandPrefix + shellPath + npmCommand from <cwd>/.pi/settings.json + extensions/), NOT models.json (which is not loaded from project scope)."
+        deferred_reason: "Cross-phase correction surfaced by Pass 4; porting is the right place to apply it during synthesis."
+      - id: sem-CR2
+        kind: defer-to-phase
+        target_phase: porting
+        description: "Correct PS1 record-type catalog: protocols claims `type: session_info` for the per-file header, but actual code uses `type: session` (session-manager.ts:31); `session_info` is a separate user-defined display-name marker."
+        deferred_reason: "Cross-phase correction surfaced by Pass 5 (5.11)."
   reimplementation-spec:
     status: pending
     owner_notes: []
@@ -269,4 +316,4 @@ phases:
     open_questions: []
     carry_forward: []
 next_actions:
-  - Run defect-scan-semantic (passes 3, 4, 5) with high/critical severity cap. 11 carry-forwards from prior phases (8 routed by mechanical phase, 2 by contracts phase, plus arch-CF8 + arch-CF9). Primary targets - Pass 4 dsm-RT1 covert-RCE via models.json !-prefix; Pass 5 con-CF6 streamSimple sync-throw contract drift; Pass 5 arch-CF8 OpenAI-compat URL matrix audit.
+  - Run porting phase. Synthesize architecture + contracts + protocols + both defect scans into reverse-engineering-bundle.md. Resolve pro-CF1 (consolidated Defect Synthesis table from 76 high/critical findings), sem-CR1 (correct project-RCE perimeter framing), sem-CR2 (PS1 record-type catalog correction).
