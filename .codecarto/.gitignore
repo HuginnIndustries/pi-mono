@@ -1,0 +1,7 @@
+# Scratch working notes — intermediate, not committed.
+scratch/*
+!scratch/.gitkeep
+
+# OS artifacts
+.DS_Store
+Thumbs.db
