@@ -8,7 +8,7 @@ pipeline: workflow/pipeline-full-with-deep-audit.yaml
 #   pipeline-defect-scan.yaml                    → remove contracts through reimplementation-spec; collapse defect phases into a single defect-scan
 #   pipeline-lite.yaml                           → remove all defect-scan phases, porting, and reimplementation-spec
 #   pipeline-architecture-only.yaml              → keep only architecture
-current_phase: defect-scan-mechanical  # Set to "complete" when all phases are done.
+current_phase: contracts  # Set to "complete" when all phases are done.
 last_updated: "2026-05-06"
 # Schema for open_questions and carry_forward entries (see GUIDE.md "Open Questions vs Carry-Forward"):
 #   open_questions: items that are still genuinely unknown (need a runtime test, maintainer decision, spec ruling).
@@ -91,17 +91,48 @@ phases:
         description: "OAuth refresh races mitigated by proper-lockfile, but trust-boundary review of credential read/write paths (mode 0600 enforcement, fallback paths, parse-error handling) belongs in pass-4."
         deferred_reason: "Security & trust boundary is pass-4's rubric."
   defect-scan-mechanical:
-    status: pending
-    owner_notes: []
-    outputs_present: []
-    open_questions: []
+    status: complete
+    owner_notes:
+      - "39 high/critical per-finding entries (22 Pass 1 logic, 11 Pass 2 error-handling incl. 2 critical data-loss findings, 6 Pass 6 config). Medium/low rolled to per-package tallies per user severity-cap policy."
+      - "2 critical: (P2.1) non-atomic JSONL session writes can truncate on crash; (P2.2) edit/write tools overwrite user code with fs.writeFile (no temp+rename) — crash mid-write destroys files."
+      - "Resolved arch-CF6 (photon WASM monkey-patch as P6.2) and arch-CF7 (undici timeouts as P6.1). Pre-emptively pre-routed P6.4 (resolveConfigValue !-prefix shell exec) to Pass 4 security."
+      - "Surfaced new finding: rg/fd auto-download has no checksum/signature verification (supply-chain hazard, routed to Pass 4 as dsm-RT9)."
+    outputs_present:
+      - findings/defect-scan-mechanical/mechanical-defects.md
+    open_questions:
+      - id: dsm-OQ1
+        kind: needs-runtime-test
+        description: "Does Node escalate EPIPE on process.stdout.write mid-paint to uncaughtException, or silently drop? Affects 2.11 severity classification."
+        deferred_reason: "Requires live runtime test."
+      - id: dsm-OQ2
+        kind: needs-runtime-test
+        description: "Does appendFileSync produce short writes or full failures on ENOSPC mid-record? Affects 2.1 severity."
+        deferred_reason: "Requires live disk-pressure test."
+      - id: dsm-OQ3
+        kind: needs-runtime-test
+        description: "Bun-binary unhandled-rejection default behavior — Node 22 default is 'throw' in 15+; Bun may differ."
+        deferred_reason: "Requires Bun runtime confirmation."
+      - id: dsm-OQ4
+        kind: needs-maintainer-decision
+        description: "Policy: should an extension hook throwing stop the loop or always be logged-and-continued? Drives finding 1.13 severity."
+        deferred_reason: "Maintainer policy call."
     carry_forward: []
   contracts:
     status: pending
     owner_notes: []
     outputs_present: []
     open_questions: []
-    carry_forward: []
+    carry_forward:
+      - id: dsm-RT5
+        kind: defer-to-phase
+        target_phase: contracts
+        description: "Extension stale-runtime contract — extensions load via jiti; behavior on hot-reload / module replacement / partial reload across the ~25 lifecycle events."
+        deferred_reason: "Contract-level treatment of the extension API surface."
+      - id: dsm-RT7
+        kind: defer-to-phase
+        target_phase: contracts
+        description: "Retry regex coupling to provider error messages (in Codex provider) — string-match fragility against provider error format changes."
+        deferred_reason: "Contract drift surface; retry policy contract treatment."
   protocols:
     status: pending
     owner_notes: []
@@ -113,7 +144,52 @@ phases:
     owner_notes: []
     outputs_present: []
     open_questions: []
-    carry_forward: []
+    carry_forward:
+      - id: dsm-RT1
+        kind: defer-to-phase
+        target_phase: defect-scan-semantic
+        description: "resolveConfigValue !-prefix shell-exec wired into auth.json api_key and models.json headers — covert RCE via project-scoped <repo>/.pi/models.json. Pass 4 security framing."
+        deferred_reason: "Pass 4 (security & trust) is the right rubric; mechanical phase resolved as P6.4 but full security treatment belongs here."
+      - id: dsm-RT2
+        kind: defer-to-phase
+        target_phase: defect-scan-semantic
+        description: "Synchronous busy-wait in auth-storage.ts between proper-lockfile retries — concurrency lens."
+        deferred_reason: "Pass 3 (concurrency) rubric."
+      - id: dsm-RT3
+        kind: defer-to-phase
+        target_phase: defect-scan-semantic
+        description: "migrateAuthToAuthJson does unlocked read-modify-write on settings.json, races proper-lockfile-protected SettingsManager."
+        deferred_reason: "Pass 3 (concurrency) rubric."
+      - id: dsm-RT4
+        kind: defer-to-phase
+        target_phase: defect-scan-semantic
+        description: "getAttributionHeaders privacy review — PII / fingerprinting in outbound HTTP headers."
+        deferred_reason: "Pass 4 (security & trust)."
+      - id: dsm-RT9
+        kind: defer-to-phase
+        target_phase: defect-scan-semantic
+        description: "rg/fd auto-download has no checksum/signature verification — supply-chain hazard. Tools execute as part of grep/find tools."
+        deferred_reason: "Pass 4 (security & trust) supply-chain rubric."
+      - id: dsm-RT10
+        kind: defer-to-phase
+        target_phase: defect-scan-semantic
+        description: "Codex retry loop has no jitter — concurrency angle (thundering-herd risk under multi-instance retry storms)."
+        deferred_reason: "Pass 3 (concurrency) rubric."
+      - id: dsm-RT11
+        kind: defer-to-phase
+        target_phase: defect-scan-semantic
+        description: "streamProxy.processProxyEvent leaks partialJson accumulator into shallow-cloned ToolCall content (mechanical 1.14) — also a Pass 5 (API contract violation) of the published ProxyAssistantMessageEvent shape."
+        deferred_reason: "Pass 5 needs the protocols-phase event catalog as ground truth before adjudicating contract violation."
+      - id: arch-CF8
+        kind: defer-to-phase
+        target_phase: defect-scan-semantic
+        description: "OpenAI-compatible URL-based compat-detection matrix (~15 vendor branches at packages/ai/src/providers/openai-completions.ts:1030+) — Pass 5 audit."
+        deferred_reason: "Carried forward from architecture phase. Pass 5 rubric."
+      - id: arch-CF9
+        kind: defer-to-phase
+        target_phase: defect-scan-semantic
+        description: "Trust-boundary review of credential read/write paths beyond the mode-0600 enforcement Pass 6 already confirmed (parse errors, fallback paths, OAuth refresh under high contention)."
+        deferred_reason: "Carried forward from architecture phase. Pass 4 rubric."
   porting:
     status: pending
     owner_notes: []
@@ -127,5 +203,4 @@ phases:
     open_questions: []
     carry_forward: []
 next_actions:
-  - Run defect-scan-mechanical (passes 1, 2, 6) with high/critical severity cap; route any pass 3/4/5 findings spotted to defect-scan-semantic via carry_forward.
-  - Resolve carry_forward arch-CF6 and arch-CF7 (photon WASM monkey-patch and undici timeouts) in mechanical-defects.md.
+  - Run contracts phase. Resolve arch-CF1 (7 built-in tool contracts) and arch-CF2 (5-level auth precedence as a contract row + security/auth-model section), and dsm-RT5 (extension stale-runtime contract) and dsm-RT7 (retry regex coupling). Standard severity policy applies (no severity cap — contracts are descriptive, not findings).
