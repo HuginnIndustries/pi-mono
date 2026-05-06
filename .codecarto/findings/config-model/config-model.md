@@ -72,3 +72,72 @@ calls. *(observed fact)*
   Pass 6 (`arch-OQ2`).
 - Whether `~/.pi/agent/settings.json` honors a JSON-Schema / TypeScript
   type contract or accepts arbitrary keys — defer to contracts.
+
+---
+
+## 2026-05-06 — contracts phase (append)
+
+Authoritative refinement of the architecture-phase config model with corrections.
+
+### Corrected Env Var Anchor
+
+- The state-anchor env var is **`PI_CODING_AGENT_DIR`** (templated `${APP_NAME.toUpperCase()}_CODING_AGENT_DIR` at `packages/coding-agent/src/config.ts:374-380`).
+- `ENV_AGENT_DIR` is the source-internal constant name; the architecture phase mistakenly elevated the constant name to a user-facing variable.
+- A fork rebrands every `PI_*` var by changing `APP_NAME`.
+
+### Per-Provider API-Key Env Var Table
+
+Authoritative per-provider env var table from `packages/ai/src/utils/env-api-keys.ts:91-209`:
+
+| Provider | Env var(s) | Notes |
+|---|---|---|
+| Anthropic | `ANTHROPIC_API_KEY` | |
+| OpenAI | `OPENAI_API_KEY` | |
+| Azure OpenAI | `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT` | Endpoint required separately |
+| Google AI Studio | `GOOGLE_API_KEY` / `GOOGLE_GENERATIVE_AI_API_KEY` | |
+| Google Vertex | `<authenticated>` sentinel | Uses Vertex Application Default Credentials |
+| AWS Bedrock | `<authenticated>` sentinel | Uses AWS SDK ambient credentials |
+| Mistral | `MISTRAL_API_KEY` | |
+| OpenAI Codex | `OPENAI_API_KEY` (also OAuth) | |
+| OpenAI-compatible (per URL family) | varies | See `openai-completions.ts:1029-1088` for the URL→key matrix |
+
+Plus hidden `PI_CACHE_RETENTION` override (cache TTL), and a Bun `/proc/self/environ` Linux fallback for ambient env reads.
+
+### File Schema Authoritative Reference
+
+For `auth.json`, `settings.json`, `models.json`, sessions JSONL:
+
+| File | Format | Schema location | Validation timing | Failure mode |
+|---|---|---|---|---|
+| `auth.json` | JSON | Implicit in `auth-storage.ts` types | On startup `reload()` | Corrupt → `loadError` set, all reads blocked until fixed (per Pass 6) |
+| `settings.json` | JSON | TS type in `core/settings-manager.ts` | On read | Schema-validation depth: open question (con-OQ1+) |
+| `models.json` | JSON | TS type in `core/config.ts` | On read | Headers values may be `!`-prefix shell strings — RCE channel for untrusted sources (dsm-RT1) |
+| Sessions JSONL v3 | JSONL | TS type (defer schema to protocols, con-CF3) | On load via `loadEntriesFromFile` | Malformed lines silently skipped (defect 2.7) |
+
+### Project-Scoped Layer (`<repo>/.pi/`)
+
+| Path | Purpose | Discovery rule |
+|---|---|---|
+| `<repo>/.pi/extensions/` | Project-scoped extensions | Loaded FIRST, then operator. Dedup by absolute path (not by name). |
+| `<repo>/.pi/prompts/` | Project-scoped slash commands | Loaded SECOND in discovery order (agent-dir → cwd-dir → flag paths) |
+| `<repo>/.pi/models.json` | Project-scoped model overrides + headers | Active config — `!`-prefix shell strings execute |
+| `<repo>/.pi/git/`, `<repo>/.pi/npm/` | Project-scoped credential storage | Gitignored; runtime credential file storage for in-project agent runs |
+
+### CLI-Flag Layer
+
+30+ user-facing flags parsed at `packages/coding-agent/src/cli/args.ts:67-189`. Unknown flags flow into `unknownFlags` map for extension consumption (`args.ts:167-180`) — extensions register their own flags.
+
+### Migration Layer
+
+Per Pass 6 and contracts phase: `runMigrations` runs unconditionally on every startup with bare-`catch {}` failure handling. Migrations affect:
+- auth.json structure
+- sessions path/format
+- binaries (rg/fd) location
+- keybindings
+- commands → prompts
+
+Hazard: silent partial migration on failure.
+
+### Trust-Boundary Reminder
+
+The `<repo>/.pi/` layer is **trusted only if the user trusts the repo**. Cloning a hostile repo and running `pi` in it is a Pass 4 attack surface (covert RCE via `models.json` `!`-prefix; arbitrary extensions auto-loaded into the agent process). Defer full Pass 4 treatment to defect-scan-semantic.

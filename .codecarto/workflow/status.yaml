@@ -8,7 +8,7 @@ pipeline: workflow/pipeline-full-with-deep-audit.yaml
 #   pipeline-defect-scan.yaml                    → remove contracts through reimplementation-spec; collapse defect phases into a single defect-scan
 #   pipeline-lite.yaml                           → remove all defect-scan phases, porting, and reimplementation-spec
 #   pipeline-architecture-only.yaml              → keep only architecture
-current_phase: contracts  # Set to "complete" when all phases are done.
+current_phase: protocols  # Set to "complete" when all phases are done.
 last_updated: "2026-05-06"
 # Schema for open_questions and carry_forward entries (see GUIDE.md "Open Questions vs Carry-Forward"):
 #   open_questions: items that are still genuinely unknown (need a runtime test, maintainer decision, spec ruling).
@@ -118,27 +118,80 @@ phases:
         deferred_reason: "Maintainer policy call."
     carry_forward: []
   contracts:
-    status: pending
-    owner_notes: []
-    outputs_present: []
-    open_questions: []
+    status: complete
+    owner_notes:
+      - "Resolved arch-CF1 (7 built-in tools), arch-CF2 (5-level auth precedence + auth model), dsm-RT5 (extension API contract incl. emitToolCall as the only unguarded hook), dsm-RT7 (Codex retry regex documented as the only retry surface). 18 black-box acceptance scenarios."
+      - "Important corrections to architecture phase: streamProxy is a CLIENT not a server; Agent methods are prompt()/continue() not run(); listener registration is subscribe() not addListener; 22 lifecycle events (not ~25); state-anchor env var is PI_CODING_AGENT_DIR (ENV_AGENT_DIR is the source-internal constant name)."
+      - "Surfaced new contract-drift open question (con-OQ3): streamSimple* synchronous throw on missing API key for Codex/Completions contradicts documented 'failures encoded in stream' contract. Routed to Pass 5 as con-CF6."
+    outputs_present:
+      - findings/contracts/behavioral-contracts.md
+      - findings/public-surfaces/public-surfaces.md (append)
+      - findings/runtime-lifecycle/runtime-lifecycle.md (append)
+      - findings/state-and-storage/state-and-storage.md (append)
+      - findings/config-model/config-model.md (append)
+    open_questions:
+      - id: con-OQ1
+        kind: needs-runtime-test
+        description: "pi-debug.log content audit — does it leak secrets / OAuth tokens?"
+        deferred_reason: "Live runtime test required."
+      - id: con-OQ2
+        kind: needs-runtime-test
+        description: "auth.json mode 0600 on Windows — does NTFS ACL behavior match POSIX intent?"
+        deferred_reason: "Windows test required."
+      - id: con-OQ3
+        kind: needs-spec-ruling
+        description: "Is streamSimple* synchronous throw on missing API key intentional pre-flight validation, or a contract drift from 'failures encoded in stream'?"
+        deferred_reason: "Maintainer ruling needed; routed to Pass 5 as con-CF6."
+      - id: con-OQ4
+        kind: needs-maintainer-decision
+        description: "Listener removal during fan-out iteration in agent.ts:539-541 — safe or undefined?"
+        deferred_reason: "Maintainer policy."
+      - id: con-OQ5
+        kind: needs-spec-ruling
+        description: "Extension API single-source-of-truth — should the 22 events be exported from one location instead of three (union type, on overloads, runner emit methods)?"
+        deferred_reason: "Drift surface needing maintainer call."
     carry_forward:
-      - id: dsm-RT5
+      - id: con-CF5
         kind: defer-to-phase
-        target_phase: contracts
-        description: "Extension stale-runtime contract — extensions load via jiti; behavior on hot-reload / module replacement / partial reload across the ~25 lifecycle events."
-        deferred_reason: "Contract-level treatment of the extension API surface."
-      - id: dsm-RT7
+        target_phase: defect-scan-semantic
+        description: "dsm-RT1 covert-RCE via models.json !-prefix shell exec — Pass 4 framing reaffirmed by contracts."
+        deferred_reason: "Already routed; reaffirmed."
+      - id: con-CF6
         kind: defer-to-phase
-        target_phase: contracts
-        description: "Retry regex coupling to provider error messages (in Codex provider) — string-match fragility against provider error format changes."
-        deferred_reason: "Contract drift surface; retry policy contract treatment."
+        target_phase: defect-scan-semantic
+        description: "streamSimple* sync-throw vs stream-error contract drift (con-OQ3); Pass 5 framing."
+        deferred_reason: "Pass 5 (contract violations) rubric."
   protocols:
     status: pending
     owner_notes: []
     outputs_present: []
     open_questions: []
-    carry_forward: []
+    carry_forward:
+      - id: arch-CF3
+        kind: defer-to-phase
+        target_phase: protocols
+        description: "Detailed event catalog for AssistantMessageEvent (12 variants) — producer, consumer, transport, ordering, fields. Now also subsumes con-CF1 (contracts named the variants but did not pin field-level schema)."
+        deferred_reason: "Event-catalog production is the protocols phase's primary deliverable."
+      - id: arch-CF4
+        kind: defer-to-phase
+        target_phase: protocols
+        description: "JSONL session persistence format v3 — exact record schema, branch-edit rewrite semantics, replay rules. Subsumes con-CF3 + dsm-RT6."
+        deferred_reason: "Persistent schema notes are a protocols-phase deliverable."
+      - id: arch-CF5
+        kind: defer-to-phase
+        target_phase: protocols
+        description: "TUI render protocol — synchronized output mode 2026, custom APC CURSOR_MARKER, diff strategy, width-change full-clear, Kitty/iTerm2 image escapes."
+        deferred_reason: "Compatibility hazards are a protocols-phase rubric section."
+      - id: con-CF2
+        kind: defer-to-phase
+        target_phase: protocols
+        description: "22-event extension catalog with handler-input-shape + return-semantics per event."
+        deferred_reason: "Event catalog rubric."
+      - id: con-CF4
+        kind: defer-to-phase
+        target_phase: protocols
+        description: "streamProxy SSE wire framing (heartbeat/keepalive open question per arch-OQ3; data: <json>\\n vs canonical SSE \\n\\n)."
+        deferred_reason: "Protocols phase wire-format rubric."
   defect-scan-semantic:
     status: pending
     owner_notes: []
@@ -203,4 +256,4 @@ phases:
     open_questions: []
     carry_forward: []
 next_actions:
-  - Run contracts phase. Resolve arch-CF1 (7 built-in tool contracts) and arch-CF2 (5-level auth precedence as a contract row + security/auth-model section), and dsm-RT5 (extension stale-runtime contract) and dsm-RT7 (retry regex coupling). Standard severity policy applies (no severity cap — contracts are descriptive, not findings).
+  - Run protocols phase. Resolve arch-CF3 (12-variant AssistantMessageEvent field-level catalog), arch-CF4 (session JSONL v3 schema), arch-CF5 (TUI render protocol), con-CF2 (22-event extension catalog), con-CF4 (streamProxy SSE framing).

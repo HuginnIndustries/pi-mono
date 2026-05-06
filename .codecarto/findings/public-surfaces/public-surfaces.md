@@ -81,3 +81,53 @@ contracts phase. *(see arch-CF1 / contracts phase)*
 These ship as part of the pi-mono repo's own `.pi/` and serve as both
 runtime extensions for users running `pi` here AND as canonical examples
 for what a project-scoped extension looks like.
+
+---
+
+## 2026-05-06 — contracts phase (append)
+
+Corrections and additions to the architecture-phase enumeration. (Catalog-level detail; primary at `findings/contracts/behavioral-contracts.md` owns the load-bearing claims.)
+
+### Corrections to architecture-phase entries
+
+- **`streamProxy` is a CLIENT, not a server.** The architecture phase's "optional SSE proxy server `/api/stream`" entry is wrong. `pi-agent-core` ships only `streamProxy({ proxyUrl })` which POSTs to a caller-supplied URL and parses SSE responses (`packages/agent/src/proxy.ts:116,152,195-205`). pi-mono ships **no listening server**.
+- **`pi-agent-core` `Agent` methods**: the public methods are `prompt(message)` and `continue()` — **not** `run()`. Listener registration is `agent.subscribe(callback)` — **not** `addListener`/`removeListener`.
+- **State-anchor env var** is `PI_CODING_AGENT_DIR` (templated `${APP_NAME.toUpperCase()}_CODING_AGENT_DIR` at `packages/coding-agent/src/config.ts:374-380`); `ENV_AGENT_DIR` is the source-internal constant name. Both refer to the same setting.
+
+### CLI Flag Inventory
+
+30+ user-facing flags parsed in `packages/coding-agent/src/cli/args.ts:67-189`. Notable:
+- `--session <id>` / `-c` (continue most-recent) / `-r` (resume) / `--no-session` — mutually exclusive with each other and with `--fork` (validated `main.ts:188-202`).
+- `--fork <id>` — branches an existing session.
+- `--print` — peeks the next arg as message if it's not a flag/`@file`.
+- `--prompt-template <path>` — adds a prompt-template search path.
+- Unknown `--flags` flow into `unknownFlags` map for extension consumption (`args.ts:167-180`) — extensions can register their own flags.
+
+### Built-in Slash Commands
+
+20 builtins enumerated in `packages/coding-agent/src/core/slash-commands.ts:18-40`. Plus user-defined prompt-template commands discovered via the order: `~/.pi/agent/prompts/` → `<cwd>/.pi/prompts/` → `--prompt-template` paths (`prompt-templates.ts:248-273`). Frontmatter is `---`-fenced YAML; supports `description` and `argument-hint` keys. Filename minus `.md` becomes the command name.
+
+### Browser Custom Element Inventory
+
+~30 custom elements in pi-web-ui (`packages/web-ui/src/index.ts`). Flagship: `<pi-chat-panel>` (`ChatPanel.ts:17`). Configuration flows through `setAgent(agent, config)` — **no HTML attribute projection** (`ChatPanel` uses only `@state()`, no `@property()` decorators). Dispatches **no** custom events. Full element list available in `scratch/contracts-tui-webui.md` §D.
+
+### File Format Updates
+
+- `models.json` — overrides + custom headers. **Headers values can be `!`-prefix shell strings** (mechanism in `packages/coding-agent/src/core/config.ts` `resolveConfigValue`). Treated as a covert RCE channel when the file comes from an untrusted project root. *(Pass 4 finding dsm-RT1.)*
+- Session JSONL v3 — defer field-level schema to protocols phase (`con-CF3`).
+
+### Subcommands
+
+`pi` intercepts subcommands before flag parsing (`main.ts:431-437`):
+- `pi install` — install pi
+- `pi update` — update pi
+- `pi config` — interactive config tool
+- (Others — defer enumeration to scratch/contracts-cli.md if needed.)
+
+### Modes Observable
+
+| Mode | Trigger | Stdout shape |
+|---|---|---|
+| Interactive TUI | TTY stdin (default) | TTY paint via pi-tui differential renderer |
+| Print mode | `--print` or piped stdin (`main.ts:634` auto-fallback) | Plain text on stdout, exit code 0/non-0 |
+| RPC mode | (mode-specific flag) | JSON-RPC over stdio |

@@ -82,3 +82,39 @@ state anchor; **`PI_*`** variables exist (defer enumeration to contracts).
   rewrite mid-read? *(defer to protocols phase, see arch-CF4)*
 - Does `pi` enforce `auth.json` mode 0600 on every write or only on creation?
   *(defer to defect-scan-semantic Pass 4)*
+
+---
+
+## 2026-05-06 — contracts phase (append)
+
+### Migrations Run on Every Startup
+
+`runMigrations` (`packages/coding-agent/src/core/migrations.ts:304-314`) runs unconditionally on every `pi` startup. Steps (each wrapped in bare `catch {}`):
+1. Auth structure migration (auth.json layout)
+2. Sessions migration (path/format updates)
+3. Binaries migration (rg/fd location moves)
+4. Keybindings migration
+5. Commands → prompts migration
+
+Failure handling silently swallows errors — partial migration state can persist. Documented as a contract: every `pi` startup performs schema migrations regardless of source-version semantics.
+
+### `models.json` Headers as Active Channel
+
+`models.json` headers values can begin with `!` and execute as shell commands during config resolution (`resolveConfigValue` in `packages/coding-agent/src/core/config.ts`). When `models.json` lives at `<repo>/.pi/models.json` and the project comes from an untrusted source, this is a **covert RCE channel**. (Pass 4 finding `dsm-RT1`; mechanical row P6.4.)
+
+### Auth Persistence Update
+
+`auth.json` mode 0600 enforced **on every write** (creation, sync, async paths) — confirmed by Pass 6, closes part of arch-CF9. Windows ACL behavior remains an open question (`con-OQ2`).
+
+### `pi-debug.log` Audit (open)
+
+Whether `pi-debug.log` leaks secrets / OAuth tokens is `con-OQ1` — needs live runtime test.
+
+### Extension State
+
+- Extension instances are loaded fresh on `ctx.reload()` (`agent-session.ts:2383`). `moduleCache: false` in the jiti loader ensures no stale closures.
+- Project-scoped extensions (`<cwd>/.pi/extensions/`) are added FIRST; operator-scoped (`~/.pi/agent/extensions/`) SECOND. Dedup is by absolute resolved path (first-seen wins) — same name in different dirs both load.
+
+### Subcommand-Owned State
+
+`pi install`, `pi update`, `pi config` modify operator state outside session bounds. (Defer detail to porting/reimpl-spec.)

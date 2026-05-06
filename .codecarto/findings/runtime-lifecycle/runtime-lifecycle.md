@@ -87,3 +87,74 @@ When `streamProxy` is enabled (`packages/agent/src/proxy.ts:116`):
 4. `import.meta.url` worker URLs used for pdfjs document extraction.
 5. Streaming display uses an rAF-batched deep-clone (`StreamingMessageContainer.ts:43-60`).
    *(observed fact — web-ui extraction)*
+
+---
+
+## 2026-05-06 — contracts phase (append)
+
+Refinements to the architecture-phase boot sequence + Agent loop, with new contract-level detail.
+
+### Mode Dispatch Refinement
+
+`packages/coding-agent/src/main.ts:98-109` `resolveAppMode` selects mode before any session work. `main.ts:673-726` is the dispatcher. Stdin-piped interactive mode auto-falls back to print mode at `main.ts:634`. RPC mode rejects `@file` args (`main.ts:475-478`). Subcommands (`install`, `update`, `config`) are intercepted before `parseArgs` (`main.ts:431-437`).
+
+### Cancellation Lifecycle (load-bearing)
+
+5 AbortControllers in `core/agent-session.ts:264-278`:
+
+| Controller | Aborts |
+|---|---|
+| `_compaction` | Manual `/compact` |
+| `_autoCompaction` | Auto-compaction triggered by context-size threshold |
+| `_branchSummary` | Branch-edit summary generation |
+| `_retry` | In-flight retry attempt |
+| `_bash` | Active bash subprocess |
+
+Plus `session.agent.signal` (the main turn signal). `session.abort()` aborts retry+agent. `agent-loop.ts` listener fan-out is sequential and unguarded (defect 1.13). Esc-during-stream calls `restoreQueuedMessagesToEditor({abort:true})` at `agent-session.ts:2357` to preserve queued messages.
+
+### Signal Handling
+
+Replicated across all three modes (interactive `:3258-3287`, print `print-mode.ts:47-63`, rpc `rpc-mode.ts:351-365`):
+
+| Signal | Effect | Exit code |
+|---|---|---|
+| Ctrl+C (single, within 500ms of next) | Double-tap to exit | n/a (waits for second tap) |
+| Ctrl+C (after 500ms) | Re-arms timer | n/a |
+| Esc | Stream-abort / bash-abort / bash-mode-exit / double-Esc → /tree or /fork (interactive only) | n/a |
+| Ctrl+D | Exit interactive mode | 0 |
+| SIGTERM | Reap detached child processes via `killTrackedDetachedChildren()`; exit | 143 |
+| SIGHUP | Same as SIGTERM | 129 |
+
+### Extension Lifecycle Sub-events
+
+Per the Extension API contract (F-EXT-1..4):
+
+```
+session_start → (agent-loop iterations: before_provider_request → ... → after_provider_response → tool_call → tool_result → ...) → session_shutdown
+                                                                                                         │
+                                                                                                         └── (before_compact at threshold)
+```
+
+- `session_start(reload)` and `session_shutdown(reload)` fire on `ctx.reload()` (`agent-session.ts:2383`) without a process exit.
+- `tool_call` is the **only unguarded** hook (per `runner.ts:806-827` — see contract F-EXT-1). Throw blocks the tool and skips subsequent `tool_call` handlers.
+
+### `streamProxy` Lifecycle Correction
+
+The architecture phase described `streamProxy` as a server lifecycle. **Correction**: `streamProxy` is a CLIENT lifecycle:
+
+1. Caller invokes `streamProxy({ proxyUrl, ... })`.
+2. Client POSTs to `${proxyUrl}/api/stream` (`packages/agent/src/proxy.ts:152`).
+3. Parses `data: <json>\n` lines (`:195-205`); reconstructs `AssistantMessageEvent` with `partial` field added back (server strips it for bandwidth).
+4. Stream closes when terminal `done` / `error` event arrives.
+5. **No heartbeat / keepalive parsing** (arch-OQ3 unresolved; con-CF4 carry-forward to protocols).
+
+### Migrations Lifecycle
+
+`runMigrations` runs **unconditionally on every startup** (per Pass 6 P6.5; `core/migrations.ts:304-314`):
+1. Auth migration (auth.json structure)
+2. Sessions migration
+3. Binaries migration (rg/fd location)
+4. Keybindings migration
+5. Commands → prompts migration
+
+Every step wrapped in bare `catch {}` — partial migration state can persist with no telemetry.
