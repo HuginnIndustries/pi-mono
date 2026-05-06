@@ -179,3 +179,20 @@ ANSI escape sequence enumeration confirmed against source (`packages/tui/src/tui
 ### Discovery / Encoding Note
 
 Session file path encoding is lossy: `--${cwd.replace(/^[/\\]/,"").replace(/[/\\:]/g,"-")}--` (`session-manager.ts:429`). `/a/b` and `/a-b` collide. Cross-OS sync of `~/.pi/agent/sessions/` is **unsafe** — case sensitivity inherits the host filesystem.
+
+---
+
+## 2026-05-06 — porting phase (append)
+
+The porting bundle's §Feature Contract Table groups all surfaces by priority (core / important / optional / incidental). 12 surface types from prior phases collapse into a porting view:
+
+- **core surfaces** (8): LLM streaming, provider selection, agent loop, 5-level auth, 7 built-in tools, session JSONL persistence, mode dispatch, cancellation.
+- **important surfaces** (6): slash commands + prompt templates, differential ANSI rendering, extension API, OAuth refresh, compaction + branching, migrations.
+- **optional surfaces** (4): streamProxy SSE client, browser custom elements, subcommands (install/update/config), photon WASM.
+- **incidental surfaces** (2): OpenAI-compat URL matrix, hardcoded ANSI escapes that don't translate 1:1.
+
+See `findings/porting/reverse-engineering-bundle.md` §Feature Contract Table for the full row-by-row mapping with key contracts and porting notes.
+
+### Cross-Phase Correction Applied
+
+Per sem-CR1, the project-RCE perimeter is **not** `models.json` `!`-prefix (which is currently scoped to operator-controlled config) but the **5-channel bundle** at `<cwd>/.pi/`: extensions/, settings.json `packages` / `shellCommandPrefix` / `shellPath` / `npmCommand`. The H24 hazard in protocols-and-state.md and the §Trust Boundaries entry in behavioral-contracts.md now carry an explicit pointer to this corrected view via the porting bundle's §Defect Synthesis.

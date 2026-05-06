@@ -176,3 +176,18 @@ Per Pass 6 P6.5 + protocols-phase: `runMigrations` runs unconditionally on every
 ### Trust-Boundary Reaffirmation
 
 The covert RCE channel via `models.json` `!`-prefix is a **config protocol violation** — config values that cross from a project-scoped `<repo>/.pi/models.json` into outbound HTTP headers should not have shell-exec semantics, regardless of whether the user originally trusts the source. Pass 4 framing pending (dsm-RT1).
+
+---
+
+## 2026-05-06 — porting phase (append)
+
+The porting bundle's §Feature Contract Table includes the "5-level auth precedence" and "models.json/settings.json/auth.json schemas" features at core priority. Porting-policy decisions:
+
+- **`!`-prefix shell-exec** in `resolveConfigValue` (defect P6.4 / sem 4.2): **fix before porting** — remove the mechanism or require explicit opt-in flag.
+- **`<cwd>/.pi/` 5-channel RCE** (defect 4.1, critical): port-CF3 to reimpl-spec — decide between default-deny + `--trust-project` flag (sem-OQ4 maintainer ruling) and the current default-allow.
+- **Migrations on every startup** (defect P6.5): port should gate migrations by version detection and surface failures, not bare-catch.
+- **`auth.json` non-atomic write + brief mode window** (defect 4.6): fix with temp-write + chmod + rename.
+
+### Cross-Phase Correction Applied (sem-CR1)
+
+The actual project-RCE perimeter is NOT `<repo>/.pi/models.json` `!`-prefix (which is scoped to operator-controlled config in current source); it is the 5-channel bundle in `<cwd>/.pi/`: `extensions/`, plus project `settings.json`'s `packages`, `shellCommandPrefix`, `shellPath`, `npmCommand`. Trust-boundary discussion in this file's prior contracts-phase append is updated by reference; the porting bundle's §Defect Synthesis is the consolidated source of truth.

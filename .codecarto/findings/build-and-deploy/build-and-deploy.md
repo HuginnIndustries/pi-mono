@@ -122,3 +122,19 @@ The contributor-gate trio + `.github/APPROVED_CONTRIBUTORS` text file is a
   generation for downstream packages.
 - `rg` / `fd` auto-download is a network side effect on the first `pi` run
   in any new environment.
+
+---
+
+## 2026-05-06 — porting phase (append)
+
+Build-and-deploy considerations for a faithful port:
+
+- **Lockstep versioning**: a port may abandon the lockstep model (one repo per layer) but should consider whether its delivery shells are intentionally co-versioned.
+- **Build order constraint** (`tui → ai → agent → coding-agent → web-ui`) is current-source-specific (mixed `tsgo` + `tsc`); a port using a single language toolchain can flatten this.
+- **Bun standalone binaries**: the WASM-bundling and `koffi`-externalization mechanics are Bun-specific; a port targeting native binaries (Go, Rust, etc.) replaces these with native FFI / linker output.
+- **Photon WASM monkey-patch** (defect P6.2): **port differently** — use a non-monkey-patching image library, or remove the feature.
+- **rg/fd auto-download** (defect 4.4): replace with bundled binaries with verified checksums, or replace with native equivalents in the target language.
+- **Browser smoke-test gate**: port should keep an analogous smoke test for any browser-targeted code path.
+- **Contributor-gate trio** (issue-gate / pr-gate / approve-contributor): governance machinery, not core functionality. **leave behind** for a port; replace with the destination project's contribution model.
+
+See `findings/porting/reverse-engineering-bundle.md` §Portability Hazards for the consolidated table.

@@ -176,3 +176,17 @@ Per-provider entries with shape `{ type: "api_key" | "oauth", api_key?: string, 
 | `settings.json` | proper-lockfile via SettingsManager | Defect P6.6 / dsm-RT3: `migrateAuthToAuthJson` does unlocked read-modify-write that races SettingsManager |
 | `models.json` | None | Reader's tolerance for concurrent rewrite open |
 | Sessions JSONL | None | Concurrent readers see partial writes |
+
+---
+
+## 2026-05-06 — porting phase (append)
+
+The porting bundle's §Persistent Schema Notes consolidates the 4 file-format catalogs (auth.json, settings.json, models.json, session JSONL v3) and the 3 branching modes into a port-ready view. Three porting-policy decisions documented:
+
+1. **Session JSONL atomicity** (defect 5.8 / mech 2.1): a port must implement temp-write + rename. Recommendation: **fix before porting**.
+2. **Deferred-flush** (defect 5.7 / dsm-RT6): port-CF5 to reimpl-spec — preserve optimization (with documented contract) or flush on every event.
+3. **Encoded-cwd lossy collisions** (protocols H16): a port should hash the cwd, not lossy string-replace.
+
+### Cross-Phase Correction Applied (sem-CR2)
+
+The per-file session JSONL header's `type` discriminator is **`"session"`** (per `packages/coding-agent/src/core/session-manager.ts:31`), not `"session_info"` as protocols PS1 wrote. `"session_info"` is a separate user-defined display-name marker. Porting bundle §Persistent Schema Notes reflects the corrected view; this append makes the correction durable in the catalog secondary.

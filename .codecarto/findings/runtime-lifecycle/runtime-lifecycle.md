@@ -218,3 +218,18 @@ Multi-instance refresh is single-flight via `proper-lockfile`:
 5. Write new token to `auth.json` (mode 0600 enforced); release lock.
 
 Provider 401 not handled by streamProxy CLIENT (no refresh path).
+
+---
+
+## 2026-05-06 — porting phase (append)
+
+The porting bundle's §Layer Map + §Protocol and State Notes consolidate the lifecycle into a port-ready view. Critical state machines a port must preserve (full FSMs in `findings/protocols/protocols-and-state.md` §State Machine):
+
+- **SM1 — Stream FSM**: 12-variant AssistantMessageEvent producer/consumer.
+- **SM2 — Deferred-flush FSM**: critical decision point — preserve the in-memory-buffer-until-first-assistant optimization (and accept dsm-RT6 / 5.7 data loss surface) or flush on every event. Routed as port-CF5 to reimpl-spec.
+- **SM3 — TUI render FSM**: differential paint with synchronized output mode 2026.
+- **SM4 — streamProxy connection FSM**: SSE CLIENT lifecycle (no heartbeat).
+- **SM5 — OAuth refresh FSM**: proper-lockfile single-flight, with stale-lock-theft hazard at >30s.
+- **SM6 — Extension reload FSM**: `session_shutdown(reload)` → invalidate ctx → re-import → `session_start(reload)`.
+
+For ports that ship only L4 (CLI), all 6 FSMs are required. For ports that ship only L5 (browser shell), only SM1 (and a subset of SM4 if streamProxy is used) is required — L5 bypasses the agent loop and TUI.

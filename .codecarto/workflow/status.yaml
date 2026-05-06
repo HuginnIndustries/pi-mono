@@ -8,7 +8,7 @@ pipeline: workflow/pipeline-full-with-deep-audit.yaml
 #   pipeline-defect-scan.yaml                    → remove contracts through reimplementation-spec; collapse defect phases into a single defect-scan
 #   pipeline-lite.yaml                           → remove all defect-scan phases, porting, and reimplementation-spec
 #   pipeline-architecture-only.yaml              → keep only architecture
-current_phase: porting  # Set to "complete" when all phases are done.
+current_phase: reimplementation-spec  # Set to "complete" when all phases are done.
 last_updated: "2026-05-06"
 # Schema for open_questions and carry_forward entries (see GUIDE.md "Open Questions vs Carry-Forward"):
 #   open_questions: items that are still genuinely unknown (need a runtime test, maintainer decision, spec ruling).
@@ -289,31 +289,76 @@ phases:
         description: "Trust-boundary review of credential read/write paths beyond the mode-0600 enforcement Pass 6 already confirmed (parse errors, fallback paths, OAuth refresh under high contention)."
         deferred_reason: "Carried forward from architecture phase. Pass 4 rubric."
   porting:
-    status: pending
-    owner_notes: []
-    outputs_present: []
+    status: complete
+    owner_notes:
+      - "Synthesized 5 prior phases into reverse-engineering-bundle.md. 5 concept layers (L1 provider normalization, L2 agent runtime, L3 terminal UI, L4 CLI shell, L5 browser shell). 20 features sorted by priority (8 core, 6 important, 4 optional, 2 incidental)."
+      - "Defect Synthesis bucketed all 76 high/critical findings: ~58 fix before porting (incl. 5 critical), ~14 port differently (source-specific hazards like undici timeouts, photon WASM, koffi FFI), ~4 leave behind (long-tail OpenAI-compat URL branches)."
+      - "Cross-phase corrections sem-CR1 (project-RCE perimeter is 5-channel bundle, not models.json) and sem-CR2 (PS1 type discriminator is `session` not `session_info`) applied in synthesis with citation."
+      - "5 carry-forwards routed to reimpl-spec — all are maintainer-policy decisions the spec must take a position on (consent gates, default-trust, deferred-flush optimization, per-tool consent, listener semantics)."
+    outputs_present:
+      - findings/porting/reverse-engineering-bundle.md
+      - findings/public-surfaces/public-surfaces.md (append)
+      - findings/runtime-lifecycle/runtime-lifecycle.md (append)
+      - findings/state-and-storage/state-and-storage.md (append)
+      - findings/build-and-deploy/build-and-deploy.md (append)
+      - findings/config-model/config-model.md (append)
     open_questions: []
     carry_forward:
-      - id: pro-CF1
+      - id: port-CF1
         kind: defer-to-phase
-        target_phase: porting
-        description: "Integrate H1-H27 protocol hazards table with mechanical (39 high/critical) + semantic (37 high/critical) defect catalogs into a single porting-oriented Defect Synthesis table with three recommendations per row (fix before porting / port differently / leave behind)."
-        deferred_reason: "Synthesis is porting phase rubric."
-      - id: sem-CR1
+        target_phase: reimplementation-spec
+        description: "Express SM1-SM6 state machines as language-agnostic FSMs in spec's Protocols and Persisted State section."
+        deferred_reason: "Spec rubric."
+      - id: port-CF2
         kind: defer-to-phase
-        target_phase: porting
-        description: "Correct framing of project-RCE perimeter in protocols H24 + contracts §Trust Boundaries during synthesis. Real perimeter is the 5-channel bundle in 4.1 (extensions + packages + shellCommandPrefix + shellPath + npmCommand from <cwd>/.pi/settings.json + extensions/), NOT models.json (which is not loaded from project scope)."
-        deferred_reason: "Cross-phase correction surfaced by Pass 4; porting is the right place to apply it during synthesis."
-      - id: sem-CR2
+        target_phase: reimplementation-spec
+        description: "Each of the 5 critical defects + 14 'port differently' hazards needs an explicit designed-around or left-behind decision in the spec, with citation."
+        deferred_reason: "Pipeline.yaml completion criteria explicitly require this."
+      - id: port-CF3
         kind: defer-to-phase
-        target_phase: porting
-        description: "Correct PS1 record-type catalog: protocols claims `type: session_info` for the per-file header, but actual code uses `type: session` (session-manager.ts:31); `session_info` is a separate user-defined display-name marker."
-        deferred_reason: "Cross-phase correction surfaced by Pass 5 (5.11)."
+        target_phase: reimplementation-spec
+        description: "Decide policy on 5-channel <cwd>/.pi/ RCE: default-deny + --trust-project flag, or default-allow with documentation? sem-OQ4 needs maintainer ruling, but the spec must take a position."
+        deferred_reason: "Maintainer-policy gate from sem-OQ4."
+      - id: port-CF4
+        kind: defer-to-phase
+        target_phase: reimplementation-spec
+        description: "Decide policy on built-in tools per-call user confirmation gate, or LLM-controlled (current behavior)? sem-OQ3 needs maintainer ruling."
+        deferred_reason: "Maintainer-policy gate from sem-OQ3."
+      - id: port-CF5
+        kind: defer-to-phase
+        target_phase: reimplementation-spec
+        description: "Decide policy on session-JSONL deferred-flush: preserve optimization (and document data-loss contract), or flush on every event? pro-OQ3 needs maintainer ruling."
+        deferred_reason: "Maintainer-policy gate from pro-OQ3."
   reimplementation-spec:
     status: pending
     owner_notes: []
     outputs_present: []
     open_questions: []
-    carry_forward: []
+    carry_forward:
+      - id: port-CF1
+        kind: defer-to-phase
+        target_phase: reimplementation-spec
+        description: "SM1-SM6 state machines re-expressed as language-agnostic FSMs in Protocols and Persisted State section."
+        deferred_reason: "Spec rubric."
+      - id: port-CF2
+        kind: defer-to-phase
+        target_phase: reimplementation-spec
+        description: "5 critical defects + 14 'port differently' hazards explicitly designed-around or left-behind with citation."
+        deferred_reason: "Pipeline completion criteria require this."
+      - id: port-CF3
+        kind: defer-to-phase
+        target_phase: reimplementation-spec
+        description: "Project-RCE consent policy decision."
+        deferred_reason: "Maintainer-policy gate from sem-OQ4."
+      - id: port-CF4
+        kind: defer-to-phase
+        target_phase: reimplementation-spec
+        description: "Per-tool user confirmation policy decision."
+        deferred_reason: "Maintainer-policy gate from sem-OQ3."
+      - id: port-CF5
+        kind: defer-to-phase
+        target_phase: reimplementation-spec
+        description: "Deferred-flush policy decision."
+        deferred_reason: "Maintainer-policy gate from pro-OQ3."
 next_actions:
-  - Run porting phase. Synthesize architecture + contracts + protocols + both defect scans into reverse-engineering-bundle.md. Resolve pro-CF1 (consolidated Defect Synthesis table from 76 high/critical findings), sem-CR1 (correct project-RCE perimeter framing), sem-CR2 (PS1 record-type catalog correction).
+  - Run reimplementation-spec phase. Strategic Alignment Hook locked at language-agnostic. Resolve port-CF1 (SM1-SM6 as language-agnostic FSMs), port-CF2 (designed-around / left-behind decisions for 5 critical + 14 'port differently' hazards), port-CF3/4/5 (maintainer-policy decisions on consent gating, per-tool confirmation, deferred-flush).

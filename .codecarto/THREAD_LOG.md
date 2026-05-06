@@ -48,4 +48,5 @@ proposed conventions and decisions in their respective sections only.
 - 2026-05-06 — contracts — documented 12 surfaces, 18 acceptance scenarios; resolved arch-CF1/CF2 + dsm-RT5/RT7; surfaced 6 architecture-phase corrections — [closeout](closeouts/2026-05-06-contracts.md)
 - 2026-05-06 — protocols — 11 boundaries, 6 event catalogs, 6 state machines (incl. deferred-flush + reload + OAuth refresh), 27 hazards; resolved arch-CF3/4/5 + con-CF1/2/3/4 + dsm-RT6 — [closeout](closeouts/2026-05-06-protocols.md)
 - 2026-05-06 — defect-scan-semantic — 37 high/critical (3 critical incl. 5-channel project-RCE breach); all 11 inbound carry-forwards closed; 2 cross-phase corrections routed to porting — [closeout](closeouts/2026-05-06-defect-scan-semantic.md)
+- 2026-05-06 — porting — 5-layer concept map; 20 features sorted by priority; 76 high/critical defects bucketed by recommendation (~58 fix / ~14 port differently / ~4 leave); 2 cross-phase corrections applied — [closeout](closeouts/2026-05-06-porting.md)
 
