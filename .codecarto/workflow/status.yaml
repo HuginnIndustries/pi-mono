@@ -8,7 +8,7 @@ pipeline: workflow/pipeline-full-with-deep-audit.yaml
 #   pipeline-defect-scan.yaml                    → remove contracts through reimplementation-spec; collapse defect phases into a single defect-scan
 #   pipeline-lite.yaml                           → remove all defect-scan phases, porting, and reimplementation-spec
 #   pipeline-architecture-only.yaml              → keep only architecture
-current_phase: reimplementation-spec  # Set to "complete" when all phases are done.
+current_phase: complete  # All 7 phases of the full-with-deep-audit pipeline are done.
 last_updated: "2026-05-06"
 # Schema for open_questions and carry_forward entries (see GUIDE.md "Open Questions vs Carry-Forward"):
 #   open_questions: items that are still genuinely unknown (need a runtime test, maintainer decision, spec ruling).
@@ -330,35 +330,57 @@ phases:
         description: "Decide policy on session-JSONL deferred-flush: preserve optimization (and document data-loss contract), or flush on every event? pro-OQ3 needs maintainer ruling."
         deferred_reason: "Maintainer-policy gate from pro-OQ3."
   reimplementation-spec:
-    status: pending
-    owner_notes: []
-    outputs_present: []
-    open_questions: []
+    status: complete
+    owner_notes:
+      - "Language-agnostic spec (Strategic Alignment Hook locked at plan). 10 conceptual modules (M1-M10), 14 required behaviors, 6 re-expressed FSMs (SM1'-SM6'), 4 persistent schemas, 20 black-box acceptance scenarios."
+      - "All 5 carry-forwards from porting resolved: port-CF1 SM1'-SM6'; port-CF2 every defect designed-around or left-behind with citation; port-CF3 default-deny + --trust-project for project-RCE; port-CF4 per-call consent for bash/edit/write; port-CF5 flush-on-every-event."
+      - "7 reimpl open questions (reimpl-OQ1..7) requiring spikes / runtime tests / maintainer decisions per port. 7-item spike list. 3 post-pipeline carry-forwards (PostCF1..3) for performance/distributed-lock spikes and a future framework correction-mechanism delta."
+    outputs_present:
+      - findings/reimplementation-spec/reimplementation-spec.md
+    open_questions:
+      - id: reimpl-OQ1
+        kind: needs-spike
+        description: "Best-fit concurrency primitive for the target language's EventStream analog."
+        deferred_reason: "Target-language choice not yet locked; spike per target."
+      - id: reimpl-OQ2
+        kind: needs-runtime-test
+        description: "Acceptable latency cost of flush-on-every-event vs deferred-flush."
+        deferred_reason: "Performance test required."
+      - id: reimpl-OQ3
+        kind: needs-maintainer-decision
+        description: "Per-call user consent UX model for bash/edit/write tools (always prompt vs remember vs flag-controlled)."
+        deferred_reason: "Maintainer policy on UX trade-off."
+      - id: reimpl-OQ4
+        kind: needs-runtime-test
+        description: "Terminal capability detection accuracy: env-var sniffing vs OSC query."
+        deferred_reason: "Test against terminal matrix."
+      - id: reimpl-OQ5
+        kind: needs-spike
+        description: "Multi-host OAuth refresh — distributed-lock vs filesystem-lock sufficient?"
+        deferred_reason: "Depends on port deployment model."
+      - id: reimpl-OQ6
+        kind: needs-maintainer-decision
+        description: "Should the port preserve streamProxy (remote-agent) feature?"
+        deferred_reason: "Product decision per port."
+      - id: reimpl-OQ7
+        kind: needs-spike
+        description: "Browser chat component — same custom-element API or different framework?"
+        deferred_reason: "Target ecosystem per port."
     carry_forward:
-      - id: port-CF1
+      - id: reimpl-PostCF1
         kind: defer-to-phase
-        target_phase: reimplementation-spec
-        description: "SM1-SM6 state machines re-expressed as language-agnostic FSMs in Protocols and Persisted State section."
-        deferred_reason: "Spec rubric."
-      - id: port-CF2
+        target_phase: spike
+        description: "Performance prototype of flush-on-every-event vs buffered-with-periodic-flush to quantify reimpl-OQ2."
+        deferred_reason: "Empirical measurement required."
+      - id: reimpl-PostCF2
         kind: defer-to-phase
-        target_phase: reimplementation-spec
-        description: "5 critical defects + 14 'port differently' hazards explicitly designed-around or left-behind with citation."
-        deferred_reason: "Pipeline completion criteria require this."
-      - id: port-CF3
+        target_phase: delta
+        description: "If a future framework revision adds an explicit correct-prior-phase carry-forward kind, apply sem-CR1 / sem-CR2 with that mechanism."
+        deferred_reason: "Framework feedback already filed; awaiting framework update."
+      - id: reimpl-PostCF3
         kind: defer-to-phase
-        target_phase: reimplementation-spec
-        description: "Project-RCE consent policy decision."
-        deferred_reason: "Maintainer-policy gate from sem-OQ4."
-      - id: port-CF4
-        kind: defer-to-phase
-        target_phase: reimplementation-spec
-        description: "Per-tool user confirmation policy decision."
-        deferred_reason: "Maintainer-policy gate from sem-OQ3."
-      - id: port-CF5
-        kind: defer-to-phase
-        target_phase: reimplementation-spec
-        description: "Deferred-flush policy decision."
-        deferred_reason: "Maintainer-policy gate from pro-OQ3."
+        target_phase: spike
+        description: "Distributed-lock prototype for multi-host OAuth refresh (reimpl-OQ5)."
+        deferred_reason: "Empirical validation."
 next_actions:
-  - Run reimplementation-spec phase. Strategic Alignment Hook locked at language-agnostic. Resolve port-CF1 (SM1-SM6 as language-agnostic FSMs), port-CF2 (designed-around / left-behind decisions for 5 critical + 14 'port differently' hazards), port-CF3/4/5 (maintainer-policy decisions on consent gating, per-tool confirmation, deferred-flush).
+  - Pipeline complete. All 7 phases of full-with-deep-audit are at status `complete`. Final outputs in findings/. Post-pipeline work is captured in reimplementation-spec carry_forward (PostCF1-3) for spike/delta phases.

@@ -49,4 +49,5 @@ proposed conventions and decisions in their respective sections only.
 - 2026-05-06 — protocols — 11 boundaries, 6 event catalogs, 6 state machines (incl. deferred-flush + reload + OAuth refresh), 27 hazards; resolved arch-CF3/4/5 + con-CF1/2/3/4 + dsm-RT6 — [closeout](closeouts/2026-05-06-protocols.md)
 - 2026-05-06 — defect-scan-semantic — 37 high/critical (3 critical incl. 5-channel project-RCE breach); all 11 inbound carry-forwards closed; 2 cross-phase corrections routed to porting — [closeout](closeouts/2026-05-06-defect-scan-semantic.md)
 - 2026-05-06 — porting — 5-layer concept map; 20 features sorted by priority; 76 high/critical defects bucketed by recommendation (~58 fix / ~14 port differently / ~4 leave); 2 cross-phase corrections applied — [closeout](closeouts/2026-05-06-porting.md)
+- 2026-05-06 — reimplementation-spec — language-agnostic spec; 10 modules (M1-M10), 14 required behaviors, 6 FSMs (SM1'-SM6'), 4 schemas, 20 acceptance scenarios; all 5 port-CF carry-forwards resolved with explicit policy positions; pipeline COMPLETE — [closeout](closeouts/2026-05-06-reimplementation-spec.md)
 
