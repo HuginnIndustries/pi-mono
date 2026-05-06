@@ -8,7 +8,7 @@ pipeline: workflow/pipeline-full-with-deep-audit.yaml
 #   pipeline-defect-scan.yaml                    → remove contracts through reimplementation-spec; collapse defect phases into a single defect-scan
 #   pipeline-lite.yaml                           → remove all defect-scan phases, porting, and reimplementation-spec
 #   pipeline-architecture-only.yaml              → keep only architecture
-current_phase: architecture  # Set to "complete" when all phases are done.
+current_phase: defect-scan-mechanical  # Set to "complete" when all phases are done.
 last_updated: "2026-05-06"
 # Schema for open_questions and carry_forward entries (see GUIDE.md "Open Questions vs Carry-Forward"):
 #   open_questions: items that are still genuinely unknown (need a runtime test, maintainer decision, spec ruling).
@@ -19,11 +19,77 @@ last_updated: "2026-05-06"
 #                defer-to-phase, needs-fixture-capture
 phases:
   architecture:
-    status: pending
-    owner_notes: []
-    outputs_present: []
-    open_questions: []   # genuinely unknown items
-    carry_forward: []    # items routed to a later phase {id, kind, target_phase, description, deferred_reason}
+    status: complete
+    owner_notes:
+      - "5 packages, ~282 source files, ~102K LOC TypeScript. Lockstep at 0.73.0."
+      - "Two stable bases (pi-ai, pi-tui); pi-agent-core layered on pi-ai; pi-coding-agent + pi-web-ui as independent delivery shells. Build order tui→ai→agent→coding-agent→web-ui is load-bearing."
+      - "Web-ui is Lit (not React); coding-agent does NOT depend on web-ui; auth precedence is 5-level resolved in coding-agent (pi-ai itself only reads env + Vertex ADC)."
+    outputs_present:
+      - findings/architecture/architecture-map.md
+      - findings/public-surfaces/public-surfaces.md
+      - findings/runtime-lifecycle/runtime-lifecycle.md
+      - findings/state-and-storage/state-and-storage.md
+      - findings/build-and-deploy/build-and-deploy.md
+      - findings/config-model/config-model.md
+    open_questions:
+      - id: arch-OQ1
+        kind: needs-runtime-test
+        description: "Does the `pi` startup rg/fd auto-download fail gracefully (or block startup) when host is offline and binaries are absent?"
+        deferred_reason: "Cannot determine from source alone; requires live boot in an offline VM."
+      - id: arch-OQ2
+        kind: needs-runtime-test
+        description: "What happens when ~/.pi/agent/auth.json exists but is corrupt JSON — does pi start, prompt, or crash?"
+        deferred_reason: "Auth resolver branches at auth-storage.ts:446-516 but parse-error path is not obvious from source."
+      - id: arch-OQ3
+        kind: needs-fixture-capture
+        description: "Exact wire format of streamProxy SSE messages over /api/stream: data: {ProxyAssistantMessageEvent}\\n is documented but heartbeat/keepalive behavior unverified."
+        deferred_reason: "Live capture against the running proxy is required."
+    carry_forward:
+      - id: arch-CF1
+        kind: defer-to-phase
+        target_phase: contracts
+        description: "Tool surface contracts for the 7 built-in coding-agent tools (read, bash, edit, write, grep, find, ls) — parameter shapes, defaults, side-effect categories."
+        deferred_reason: "Contracts phase rubric is the right place to spell out trigger/inputs/defaults/outputs/side-effects/error-behavior per tool."
+      - id: arch-CF2
+        kind: defer-to-phase
+        target_phase: contracts
+        description: "5-level auth precedence resolver (runtime override → api_key → oauth → env → fallback) deserves a contract row with security/auth-model treatment."
+        deferred_reason: "Security & authorization is a contracts-phase rubric section."
+      - id: arch-CF3
+        kind: defer-to-phase
+        target_phase: protocols
+        description: "Detailed event catalog for AssistantMessageEvent (12 variants) — producer, consumer, transport, ordering, fields."
+        deferred_reason: "Event-catalog production is the protocols phase's primary deliverable."
+      - id: arch-CF4
+        kind: defer-to-phase
+        target_phase: protocols
+        description: "JSONL session persistence format v3 — exact record schema, branch-edit rewrite semantics, replay rules."
+        deferred_reason: "Persistent schema notes are a protocols-phase deliverable."
+      - id: arch-CF5
+        kind: defer-to-phase
+        target_phase: protocols
+        description: "TUI render protocol — synchronized output mode 2026, custom APC CURSOR_MARKER, diff strategy, width-change full-clear, Kitty/iTerm2 image escapes."
+        deferred_reason: "Compatibility hazards are a protocols-phase rubric section."
+      - id: arch-CF6
+        kind: defer-to-phase
+        target_phase: defect-scan-mechanical
+        description: "photon WASM monkey-patch of fs.readFileSync (packages/coding-agent/src/utils/photon.ts) — global require-time mutation."
+        deferred_reason: "Pass-6 environment-coupling rubric is the right framing."
+      - id: arch-CF7
+        kind: defer-to-phase
+        target_phase: defect-scan-mechanical
+        description: "undici bodyTimeout/headersTimeout: 0 at CLI startup (coding-agent/src/cli.ts:20) disables built-in safety mechanism globally."
+        deferred_reason: "Pass-6 environment/config coupling."
+      - id: arch-CF8
+        kind: defer-to-phase
+        target_phase: defect-scan-semantic
+        description: "OpenAI-compatible URL-based compat-detection matrix (packages/ai/src/providers/openai-completions.ts:1030+) — deep semantic-pass-5 audit of contract violations across ~15 vendor branches."
+        deferred_reason: "Pass-5 (API contract violations) is the right rubric; contracts/protocols context required."
+      - id: arch-CF9
+        kind: defer-to-phase
+        target_phase: defect-scan-semantic
+        description: "OAuth refresh races mitigated by proper-lockfile, but trust-boundary review of credential read/write paths (mode 0600 enforcement, fallback paths, parse-error handling) belongs in pass-4."
+        deferred_reason: "Security & trust boundary is pass-4's rubric."
   defect-scan-mechanical:
     status: pending
     owner_notes: []
@@ -61,4 +127,5 @@ phases:
     open_questions: []
     carry_forward: []
 next_actions:
-  - Begin architecture phase by reading the repository and producing findings/architecture/architecture-map.md
+  - Run defect-scan-mechanical (passes 1, 2, 6) with high/critical severity cap; route any pass 3/4/5 findings spotted to defect-scan-semantic via carry_forward.
+  - Resolve carry_forward arch-CF6 and arch-CF7 (photon WASM monkey-patch and undici timeouts) in mechanical-defects.md.

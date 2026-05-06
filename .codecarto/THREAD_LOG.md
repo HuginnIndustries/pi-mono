@@ -43,3 +43,5 @@ proposed conventions and decisions in their respective sections only.
   - 2026-05-02 — framework-feedback-pass — applied 6 spec-blockers + 5 clarifications from FEEDBACK_INDEX.md — [closeout](closeouts/2026-05-02-framework-feedback-pass.md)
 -->
 
+- 2026-05-06 — architecture — mapped 5 packages (pi-ai, pi-agent-core, pi-tui, pi-web-ui, pi-coding-agent), 6 portability hazards, 9 carry-forward items routed — [closeout](closeouts/2026-05-06-architecture.md)
+
