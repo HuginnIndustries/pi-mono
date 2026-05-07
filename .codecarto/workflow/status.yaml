@@ -36,14 +36,17 @@ phases:
         kind: needs-runtime-test
         description: "Does the `pi` startup rg/fd auto-download fail gracefully (or block startup) when host is offline and binaries are absent?"
         deferred_reason: "Cannot determine from source alone; requires live boot in an offline VM."
+        resolution: "PARTIALLY RESOLVED post-pipeline (see closeouts/2026-05-06-post-pipeline-oq-triage.md). Source confirms: ensureTool catch-all returns undefined silently; offline/HTTP-error/corrupt not distinguished; PI_OFFLINE env var explicitly opts out. Auto-detection of offline still unverified."
       - id: arch-OQ2
         kind: needs-runtime-test
         description: "What happens when ~/.pi/agent/auth.json exists but is corrupt JSON — does pi start, prompt, or crash?"
         deferred_reason: "Auth resolver branches at auth-storage.ts:446-516 but parse-error path is not obvious from source."
+        resolution: "PARTIALLY ANSWERED in mechanical Pass 6 (see mechanical-defects.md): process starts, sets loadError, blocks credential reads until file fixed."
       - id: arch-OQ3
         kind: needs-fixture-capture
         description: "Exact wire format of streamProxy SSE messages over /api/stream: data: {ProxyAssistantMessageEvent}\\n is documented but heartbeat/keepalive behavior unverified."
         deferred_reason: "Live capture against the running proxy is required."
+        resolution: "RESOLVED post-pipeline (see closeouts/2026-05-06-post-pipeline-oq-triage.md). Confirmed at proxy.ts:192-206: parser handles ONLY `data: ` prefix lines; comment lines, event:, id:, retry:, blank lines all silently dropped. No client-side keepalive mechanism. AbortSignal at :187/:209 is the only liveness mechanism."
     carry_forward:
       - id: arch-CF1
         kind: defer-to-phase
@@ -104,6 +107,7 @@ phases:
         kind: needs-runtime-test
         description: "Does Node escalate EPIPE on process.stdout.write mid-paint to uncaughtException, or silently drop? Affects 2.11 severity classification."
         deferred_reason: "Requires live runtime test."
+        resolution: "RESOLVED post-pipeline (see closeouts/2026-05-06-post-pipeline-oq-triage.md). Source confirms hard process kill: terminal.ts:318-327 has bare process.stdout.write with no callback/try/catch/error-listener; only stdout listener anywhere is .on('resize') at :107; grep across all packages for uncaughtException/unhandledRejection returns ZERO matches. Per Node semantics: EPIPE on a writable with no 'error' listener → unhandled error event → uncaughtException → exit code 1 + stack trace. Pi does nothing to mitigate."
       - id: dsm-OQ2
         kind: needs-runtime-test
         description: "Does appendFileSync produce short writes or full failures on ENOSPC mid-record? Affects 2.1 severity."
@@ -116,6 +120,7 @@ phases:
         kind: needs-maintainer-decision
         description: "Policy: should an extension hook throwing stop the loop or always be logged-and-continued? Drives finding 1.13 severity."
         deferred_reason: "Maintainer policy call."
+        resolution: "RESOLVED in contracts F-EXT-1 + semantic Pass 5 finding 5.9: emitToolCall is the only unguarded extension emitter (runner.ts:806-827); throw blocks the tool AND skips subsequent tool_call handlers. The reimpl-spec M8 invariants take divergent position: all 22 emit paths are uniformly guarded (log + skip; tool not blocked)."
     carry_forward: []
   contracts:
     status: complete
@@ -134,6 +139,7 @@ phases:
         kind: needs-runtime-test
         description: "pi-debug.log content audit — does it leak secrets / OAuth tokens?"
         deferred_reason: "Live runtime test required."
+        resolution: "RESOLVED in semantic Pass 4 finding 4.5 (see semantic-defects.md): yes, /debug command writes full conversation incl. tool outputs and pasted secrets to pi-debug.log, no redaction, umask-default permissions (typically 0644). High-severity finding."
       - id: con-OQ2
         kind: needs-runtime-test
         description: "auth.json mode 0600 on Windows — does NTFS ACL behavior match POSIX intent?"
@@ -142,14 +148,17 @@ phases:
         kind: needs-spec-ruling
         description: "Is streamSimple* synchronous throw on missing API key intentional pre-flight validation, or a contract drift from 'failures encoded in stream'?"
         deferred_reason: "Maintainer ruling needed; routed to Pass 5 as con-CF6."
+        resolution: "RESOLVED as semantic Pass 5 finding 5.1: contract drift confirmed — explicit StreamFunction doc-comment at types.ts:147-159 says errors must flow through stream; 9 of 9 production providers' streamSimple* variants violate this for missing-API-key precondition. Spec position M1 invariants: errors via stream end-to-end."
       - id: con-OQ4
         kind: needs-maintainer-decision
         description: "Listener removal during fan-out iteration in agent.ts:539-541 — safe or undefined?"
         deferred_reason: "Maintainer policy."
+        resolution: "RESOLVED post-pipeline. agent.ts:160 declares `private readonly listeners = new Set<...>()`; iteration is `for...of` over the live Set with no defensive snapshot. Per ECMAScript Set-iteration: removal during iteration deterministically skips the listener; addition is visited. NEW finding NF1 (see closeouts/2026-05-06-post-pipeline-oq-triage.md): refines defects 1.13/5.10 with the precise mechanism. Reimpl-spec M3 should pin defensive-snapshot semantics."
       - id: con-OQ5
         kind: needs-spec-ruling
         description: "Extension API single-source-of-truth — should the 22 events be exported from one location instead of three (union type, on overloads, runner emit methods)?"
         deferred_reason: "Drift surface needing maintainer call."
+        resolution: "RESOLVED post-pipeline with NEW DRIFT (see closeouts/2026-05-06-post-pipeline-oq-triage.md). Confirmed: ExtensionEvent union (types.ts:950-972) lists 22 names; on() overloads (:1089-1126) list 30 distinct names; the 8 session_* events (SessionStartEvent, SessionBeforeSwitchEvent, SessionBeforeForkEvent, SessionBeforeCompactEvent, SessionCompactEvent, SessionShutdownEvent, SessionBeforeTreeEvent, SessionTreeEvent) are missing from the union. NEW finding NF2: actual drift, not just nominal duplication. Strengthens protocols H19."
     carry_forward:
       - id: con-CF5
         kind: defer-to-phase
@@ -178,6 +187,7 @@ phases:
         kind: needs-fixture-capture
         description: "streamProxy SSE heartbeat/keepalive — does the server send any keepalive? Continues arch-OQ3."
         deferred_reason: "Live capture against running proxy required."
+        resolution: "RESOLVED post-pipeline (same source-read as arch-OQ3). Client-side: NO keepalive parsing — only `data: ` prefix lines processed. Server-side keepalive is undefined for pi-mono since no server ships in this repo."
       - id: pro-OQ2
         kind: needs-runtime-test
         description: "Concurrent-reader detection on session JSONL during mid-rewrite — truncated file? EBUSY? inconsistent JSONL stream?"
@@ -190,10 +200,12 @@ phases:
         kind: needs-runtime-test
         description: "Behavior when terminal does not support `\\x1b[?2026` (no synchronized output) — fallback or text leak?"
         deferred_reason: "Terminal-capability test required."
+        resolution: "RESOLVED post-pipeline (see closeouts/2026-05-06-post-pipeline-oq-triage.md). NO feature detection: tui.ts emits `\\x1b[?2026h`/`\\x1b[?2026l` unconditionally at all 6 sites (lines 920, 926, 1019, 1048, 1071, 1155). No DA1/DA2 query, no TERM check, no opt-out env var. The only terminal branch nearby is isTermuxSession() at :111-112 which only affects height-change full-redraw decisions. Terminals that don't grok the sequence will display literal text or ignore it."
       - id: pro-OQ5
         kind: needs-runtime-test
         description: "EPIPE on process.stdout.write mid-paint (defect 2.11) — uncaught warning or silent absorb?"
         deferred_reason: "Disconnect-mid-paint test required."
+        resolution: "RESOLVED — same as dsm-OQ1: hard process kill, no mitigation. See closeouts/2026-05-06-post-pipeline-oq-triage.md."
     carry_forward:
       - id: pro-CF1
         kind: defer-to-phase
